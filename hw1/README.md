@@ -3,7 +3,7 @@
 ## Описание
 
 Этот проект содержит:
-- Пошаговую инструкцию по развертыванию HDFS-кластера (3 DataNode, NameNode, Secondary NameNode)
+- Пошаговую инструкцию по развертыванию HDFS-кластера
 - Автоматизирующие скрипты на bash
 
 ## Структура
@@ -30,7 +30,3 @@ bash scripts/07-distribute-configs.sh
 bash scripts/08-update-hostnames.sh
 bash scripts/09-start-cluster.sh
 ```
-
-## Автор
-
-- Студент ФКН ВШЭ
