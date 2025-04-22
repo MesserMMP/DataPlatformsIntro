@@ -1,8 +1,9 @@
-# HW2: Развёртывание  YARN
 
-## 🔐 Шаг 1: Подключение к среде
+# 📘 HW2: Развёртывание YARN и настройка веб-интерфейсов
 
-Подключаемся к главному узлу:
+## 🔐 Шаг 1: Подключение к кластеру
+
+Подключитесь к главному узлу с вашего локального терминала:
 
 ```bash
 ssh team@176.109.91.5
@@ -10,32 +11,34 @@ ssh team@176.109.91.5
 
 ---
 
-## Остальные шаги: 
+## 👤 Шаг 2: Переход в пользователя `hadoop` и вход на узел `tmpl-nn`
 
-Зайдем в пользователя hadoop и переключимся на узел  `nn`:
 ```bash
 sudo -i -u hadoop
 ssh tmpl-nn
 ```
 
+---
 
-Создадим файловую систему и запустим ее:
+## 🛠️ Шаг 3: Форматирование и запуск HDFS (если не сделано ранее)
+
 ```bash
 hadoop-3.4.0/bin/hdfs namenode -format
 hadoop-3.4.0/sbin/start-dfs.sh
 ```
 
-Для работы с web-интерфейсом создадим файл `/etc/nginx/sites-available/nn` с таким содержанием:
+---
+
+## 🌐 Шаг 4: Настройка проброса порта и веб-интерфейса HDFS (порт 9870)
+
+Создайте файл `/etc/nginx/sites-available/nn` со следующим содержимым:
 
 ```nginx
 server {
  listen 9870;
 
-
  root /var/www/html;
-
- # Add index.php to the list if you are using PHP
- index index.html index.htm index.nginx-debian.html;
+ index index.html index.htm;
 
  server_name _;
 
@@ -44,36 +47,37 @@ server {
  }
 }
 ```
-Сделаем конфигурацию активной:
+
+Активируйте конфигурацию и перезапустите `nginx`:
 
 ```bash
 sudo ln -s /etc/nginx/sites-available/nn /etc/nginx/sites-enabled/nn
 sudo systemctl reload nginx
 ```
 
-Для проброски портов через локальный терминал выполним команду:
+На своей машине пробросьте порт:
+
 ```bash
 ssh -L 9870:127.0.0.1:9870 team@176.109.91.5
 ```
 
-## YARN
+---
 
-Подключаемся к главному узлу, зайдем в пользователя hadoop и перейдем в папку `hadoop-3.4.0/etc/hadoop/`:
+## ⚙️ Шаг 5: Настройка YARN
+
+На узле `tmpl-jn`:
 
 ```bash
-ssh team@176.109.91.5
-sudo -i -u hadoop
 cd hadoop-3.4.0/etc/hadoop/
 ```
 
-Изменим содердимое файла `yarn-site.xml`:
+Измените содержимое файла `yarn-site.xml`:
 
 ```xml
 <configuration>
-<!-- Site specific YARN configuration properties -->
     <property>
-      <name>yarn.nodemanager.aux-services</name>
-      <value>mapreduce_shuffle</value>
+        <name>yarn.nodemanager.aux-services</name>
+        <value>mapreduce_shuffle</value>
     </property>
     <property>
         <name>yarn.nodemanager.env-whitelist</name>
@@ -94,7 +98,8 @@ cd hadoop-3.4.0/etc/hadoop/
 </configuration>
 ```
 
-Изменим содердимое файла `mapred-site.xml`:
+Измените содержимое файла `mapred-site.xml`:
+
 ```xml
 <configuration>
     <property>
@@ -108,45 +113,39 @@ cd hadoop-3.4.0/etc/hadoop/
 </configuration>
 ```
 
-Скопируем их на остальные узлы:
+Скопируйте файлы на все узлы:
+
 ```bash
-scp yarn-site.xml tmpl-nn:/home/hadoop/hadoop-3.4.0/etc/hadoop
-scp yarn-site.xml tmpl-dn-00:/home/hadoop/hadoop-3.4.0/etc/hadoop
-scp yarn-site.xml tmpl-dn-01:/home/hadoop/hadoop-3.4.0/etc/hadoop
-scp mapred-site.xml tmpl-nn:/home/hadoop/hadoop-3.4.0/etc/hadoop
-scp mapred-site.xml tmpl-dn-00:/home/hadoop/hadoop-3.4.0/etc/hadoop
-scp mapred-site.xml tmpl-dn-01:/home/hadoop/hadoop-3.4.0/etc/hadoop
+for node in tmpl-nn tmpl-dn-00 tmpl-dn-01; do
+  scp yarn-site.xml mapred-site.xml $node:/home/hadoop/hadoop-3.4.0/etc/hadoop/
+done
 ```
 
-Теперь можно запустить `yarn`:
+---
+
+## ▶️ Шаг 6: Запуск YARN и History Server
+
+На узле `tmpl-nn`:
+
 ```bash
-ssh tmpl-nn
 hadoop-3.4.0/sbin/start-yarn.sh
-```
- Также запустим `historyserver`:
-```bash
 mapred --daemon start historyserver
 ```
 
-Вернемся на `jn` и настроим `nginx`, чтобы увидеть web интерфейс. 
-Создадим файлы `/etc/nginx/sites-available/ya` и `/etc/nginx/sites-available/dh` на основе `/etc/nginx/sites-available/nn`, но со своими портами:
-```bash
-ssh tmpl-nn
-sudo cp /etc/nginx/sites-available/nn /etc/nginx/sites-available/ya
-sudo cp /etc/nginx/sites-available/nn /etc/nginx/sites-available/dh
-```
+---
 
-### `/etc/nginx/sites-available/ya`
+## 🌍 Шаг 7: Настройка веб-интерфейсов YARN (порт 8088) и History Server (порт 19888)
+
+Создайте файлы `/etc/nginx/sites-available/ya` и `/etc/nginx/sites-available/dh`:
+
+### Файл `/etc/nginx/sites-available/ya`
 
 ```nginx
 server {
  listen 8088;
 
-
  root /var/www/html;
-
- # Add index.php to the list if you are using PHP
- index index.html index.htm index.nginx-debian.html;
+ index index.html index.htm;
 
  server_name _;
 
@@ -156,17 +155,14 @@ server {
 }
 ```
 
-### `/etc/nginx/sites-available/dh`
+### Файл `/etc/nginx/sites-available/dh`
 
 ```nginx
 server {
  listen 19888;
 
-
  root /var/www/html;
-
- # Add index.php to the list if you are using PHP
- index index.html index.htm index.nginx-debian.html;
+ index index.html index.htm;
 
  server_name _;
 
@@ -176,7 +172,7 @@ server {
 }
 ```
 
-Сделаем конфигурации активными:
+Активируйте и перезапустите `nginx`:
 
 ```bash
 sudo ln -s /etc/nginx/sites-available/ya /etc/nginx/sites-enabled/ya
@@ -184,8 +180,24 @@ sudo ln -s /etc/nginx/sites-available/dh /etc/nginx/sites-enabled/dh
 sudo systemctl reload nginx
 ```
 
-Для проброски портов через локальный терминал выполним команду:
+---
+
+## 🔁 Шаг 8: Проброс портов для веб-интерфейсов
+
+На своей машине выполните:
+
 ```bash
 ssh -L 9870:127.0.0.1:9870 -L 8088:127.0.0.1:8088 -L 19888:127.0.0.1:19888 team@176.109.91.5
 ```
 
+---
+
+## ✅ Результат
+
+После выполнения всех шагов:
+
+- Интерфейс HDFS доступен на [localhost:9870](http://localhost:9870)
+- Интерфейс YARN — на [localhost:8088](http://localhost:8088)
+- History Server — на [localhost:19888](http://localhost:19888)
+
+---
