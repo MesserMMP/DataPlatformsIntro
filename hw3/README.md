@@ -1,25 +1,44 @@
-# 🐝 HW3: Hive Deployment (Non-Embedded)
+# 📁 HW3: Автоматизированное развертывание Apache Hive
 
-## 📄 Description
-This repository contains documentation and scripts to deploy Apache Hive 4.0.0-alpha-2 in a non-embedded mode with PostgreSQL as the metastore. It includes the steps for:
-- Installing and configuring PostgreSQL
-- Setting up Hive with proper configuration
-- Loading sample data into a partitioned Hive table
-- Verifying data load
+## 📌 Описание
 
-## 📂 Structure
+Это решение задания №3 по курсу "Введение в платформы данных". Цель — развертывание Apache Hive в распределённом режиме (не embedded), с использованием PostgreSQL в качестве мета-хранилища и поддержкой нескольких клиентов через HiveServer2.
+
+Проект включает:
+
+- Полную инструкцию по ручному развёртыванию Hive (`instructions.md`)
+- Bash-скрипты для автоматизации:
+  - Установки и настройки PostgreSQL
+  - Установки Hive и необходимых зависимостей
+  - Настройки конфигурации
+  - Инициализации схемы Hive
+  - Примера загрузки данных в партиционированную таблицу
+
+## 🧱 Структура проекта
+
 ```
 hw3-hive-deployment/
-│
-├── instructions.md         # Manual deployment instructions
-├── README.md               # General overview
-└── scripts/                # Automation scripts
-    ├── 1_init_postgres.sh
-    ├── 2_install_hive.sh
-    ├── 3_setup_hive_env.sh
-    ├── 4_start_hive.sh
-    └── 5_load_sample_data.sh
+├── README.md
+├── instructions.md
+└── scripts/
+    ├── 01_postgres_setup.sh
+    ├── 02_hive_install.sh
+    ├── 03_hive_config.sh
+    ├── 04_hive_init.sh
+    └── 05_load_example_data.sh
 ```
 
-## 🛠 Usage
-You can follow either `instructions.md` for manual steps or run the automation scripts in order from the `scripts/` directory.
+## 🚀 Как использовать
+
+1. Ознакомьтесь с `instructions.md` для понимания шагов.
+2. Используйте скрипты из папки `scripts/` для автоматизации каждого этапа развертывания.
+3. Убедитесь, что выполняете скрипты на нужных узлах (`tmpl-nn`, `tmpl-jn`, и т.д.) от соответствующих пользователей (`postgres`, `hadoop`).
+
+## ✅ Требования
+
+- 4 виртуальные машины с Ubuntu 24.04
+- Установленные Java 11
+- Настроенный кластер HDFS
+- Hive 4.0.0-alpha-2
+
+---
