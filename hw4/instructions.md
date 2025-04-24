@@ -1,45 +1,56 @@
-# 📘 HW4: Реализация Apache Spark под управлением YARN
+# 📘 HW4: Развертывание Apache Spark с YARN и интеграция с HDFS + Hive
 
+## 📋 Описание задания
 
-## 🛠️ Предустановки
-
-- Убедитесь, что у вас у вас установлена версия Java, совместимая со `Spark`
-- Убедитесь, что объявлена переменная окружения `HADOOP_HOME` и она указывает на `Hadoop`
-- Убедитесь, что в `PATH` добавлены исполняемые файлы дистрибутива `Hadoop`
-
-
-## 🔐 Шаг 1: Подключение к кластеру
-
-Подключитесь к главному узлу с вашего локального терминала, прокинув порты:
-
-```bash
-ssh -L 9870:127.0.0.1:9870 -L 8088:127.0.0.1:8088 -L 19888:127.0.0.1:19888 team@176.109.91.5
-```
+Реализация использования Apache Spark под управлением YARN на кластере, настроенном в предыдущих заданиях. Работа включает чтение, трансформацию и сохранение данных в Hive, с использованием партиционирования и возможностью чтения через Hive CLI.
 
 ---
 
+## 🧰 Предварительные требования
 
-Установите `python-venv` и `python-pip` и `IPython`:
+- Ubuntu 24.04
+- Python 3.12.3
+- Java 11.0.26
+- Развернутый кластер HDFS
+- Развернутый Hive Metastore
+
+---
+
+## 🔐 Шаг 1. Подключение к главному узлу (Jump Node)
 
 ```bash
-sudo apt install python3-venv
-sudo apt install python3-pip
+ssh -L 9870:127.0.0.1:9870 -L 8088:127.0.0.1:8088 -L 19888:127.0.0.1:19888 team@<JUMP-HOST-IP>
 ```
 
-## 👤 Шаг 2: Переход в пользователя `hadoop` и далее
+Замените `<JUMP-HOST-IP>` на IP-адрес вашей jump-ноды.
+
+---
+
+## ⚙️ Шаг 2. Установка и настройка окружения
+
+### Установка зависимостей:
+
+```bash
+sudo apt update
+sudo apt install python3-venv python3-pip
+```
+
+### Переход в пользователя Hadoop:
 
 ```bash
 sudo -i -u hadoop
 ```
 
-Установите и разархивируйте дистрибутив `Spark`:
+### Скачивание и установка Apache Spark:
+
 ```bash
 wget https://archive.apache.org/dist/spark/spark-3.5.3/spark-3.5.3-bin-hadoop3.tgz
 tar -xzvf spark-3.5.3-bin-hadoop3.tgz
 ```
-## Подготовка среды для работы со `Spark`
 
-Объявите ряд переменных, для `SPARK_LOCAL_IP` укажите локальный ip-адрес jump-ноды: 
+---
+
+## 🌍 Шаг 3. Настройка переменных окружения
 
 ```bash
 export HADOOP_CONF_DIR="/home/hadoop/hadoop-3.4.0/etc/hadoop"
@@ -47,7 +58,7 @@ export HIVE_HOME="/home/apache-hive-4.0.1-bin"
 export HIVE_CONF_DIR=$HIVE_HOME/conf
 export HIVE_AUX_JARS_PATH=$HIVE_HOME/lib/*
 export PATH=$PATH:$HIVE_HOME/bin
-export SPARK_LOCAL_IP=192.168.1.14
+export SPARK_LOCAL_IP=192.168.1.14 # Укажите IP вашей jump-ноды
 export SPARK_DIST_CLASSPATH="/home/hadoop/spark-3.5.3-bin-hadoop3/jars/*:/home/hadoop/hadoop-3.4.0/etc/hadoop:/home/hadoop/hadoop-3.4.0/share/hadoop/common/lib/*:/home/hadoop/hadoop-3.4.0/share/hadoop/common/*:/home/hadoop/hadoop-3.4.0/share/hadoop/hdfs:/home/hadoop/hadoop-3.4.0/share/hadoop/hdfs/lib/*:/home/hadoop/hadoop-3.4.0/share/hadoop/hdfs/*:/home/hadoop/hadoop-3.4.0/share/hadoop/mapreduce/*:/home/hadoop/hadoop-3.4.0/share/hadoop/yarn:/home/hadoop/hadoop-3.4.0/share/hadoop/yarn/lib/*:/home/hadoop/hadoop-3.4.0/share/hadoop/yarn/*:/home/hadoop/apache-hive-4.0.0-alpha-2-bin/*:/home/hadoop/apache-hive-4.0.0-alpha-2-bin/lib/*"
 cd spark-3.5.3-bin-hadoop3/
 export SPARK_HOME=`pwd`
@@ -55,41 +66,47 @@ export PYTHONPATH=$(ZIPS=("$SPARK_HOME"/python/lib/*.zip); IFS=:; echo "${ZIPS[*
 export PATH=$SPARK_HOME/bin:$PATH
 ```
 
-Вернитесь в домашнюю директорию и создадим новое виртуальное оркружение:
+---
+
+## 🧪 Шаг 4. Подготовка Python окружения
+
 ```bash
 cd ~
 python3 -m venv venv
 source venv/bin/activate
-```
 
-Обновите `pip`, установите `IPython` и `onetl[files]`:
-```bash
 pip install -U pip
 pip install ipython
 pip install onetl[files]
 ```
 
-В файловой системе `hadoop` создайте папку `input` и положите туда данные для работы со `Spark` в формате `.csv`:
+---
+
+## 📂 Шаг 5. Подготовка данных в HDFS
+
 ```bash
 hdfs dfs -mkdir -p /input
-# Вместо ... укажите ссылку для скачивания данных
-wget ... 
+wget <ССЫЛКА_НА_ДАННЫЕ> -O for_spark.csv
 hdfs dfs -put for_spark.csv /input
 ```
 
-Теперь запустите сессию `Spark`, чтобы преобразовать этот `.csv` файл в таблицу, описанную с помощью `hive`:
+---
+
+## 🚀 Шаг 6. Запуск Spark-сессии с Hive и YARN
+
 ```bash
 ipython
 ```
 
+### 📦 Чтение данных и подключение к HDFS:
+
 ```python
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
-from onetl.connection import SparkHDFS
-from onetl.connection import Hive
+from pyspark.sql import SparkSession, functions as F
+from onetl.connection import SparkHDFS, Hive
 from onetl.file import FileDFReader
 from onetl.file.format import CSV
 from onetl.db import DBWriter
+
 spark = SparkSession.builder \
     .master("yarn") \
     .appName("spark-with-yarn") \
@@ -97,41 +114,102 @@ spark = SparkSession.builder \
     .config("spark.hive.metastore.uris", "thrift://tmpl-jn:9083") \
     .enableHiveSupport() \
     .getOrCreate()
+
 hdfs = SparkHDFS(host="tmpl-nn", port=9000, spark=spark, cluster="test")
-hdfs.check()
 reader = FileDFReader(connection=hdfs, format=CSV(delimiter=",", header=True), source_path="/input")
-df = reader.run(["for_spark.csv"]) # Читаем данные, результат - дата фрейм
+df = reader.run(["for_spark.csv"])
 df.count() # Общее число строк
 df.rdd.getNumPartitions() # Число партиций
 ```
-Создайте столбец для дальнейшего партиционирования и добавьте его в дата фрейм
+
+---
+
+## 🔁 Шаг 7. Трансформация и партиционирование
+
+Добавим колонку `reg_year` для партиционирования:
+
 ```python
-dt = df.select("registrstion date")
-dt.show()
-df = df.withColumn("reg_year", F.col("registrstion date").substr(0, 4))
-dt = df.select("reg_year")
-dt.show()
+df = df.withColumn("reg_year", F.col("registration date").substr(0, 4))
+df.select("reg_year").distinct().show() # Показываем уникальные значения в столбце партиционирования
 ```
 
-Запишите данные как таблицу:
+---
+
+## 📝 Шаг 8. Запись данных в Hive тремя способами
+
+### ✅ Способ 1. Автоматическая запись через Spark без явного указания партиций
+
+Создаём таблицу `test.spark_auto`:
+
 ```python
+from onetl.db import DBWriter
+from onetl.connection import Hive
+
 hive = Hive(spark=spark, cluster="test")
-hive.check() # Проверяем подключение
-writer = DBWriter(connection=hive, table="test.spark_parts", options={"if_exists": "replace_entire_table"})
+hive.check()  # Проверка подключения
+
+writer = DBWriter(
+    connection=hive,
+    table="test.spark_auto",
+    options={"if_exists": "replace_entire_table"},
+)
 writer.run(df)
-# writer.run(df.coalesce(1)) # Склеивает все партиции Spark в 1
 ```
 
-Пример партиционирования через `Hive`
+---
+
+### ✅ Способ 2. Объединение всех партиций Spark в одну (coalesce)
+
+Создаём таблицу `test.spark_single_partition`:
+
 ```python
-hive = Hive(spark=spark, cluster="test")
-hive.check() # Проверяем подключение
-writer = DBWriter(connection=hive, table="test.hive_parts", options={"if_exists": "replace_entire_table", "partitionBy": "reg_year"}) # reg_year - столбец, по которому происходит партиционирование
+df_single_partition = df.coalesce(1)
+
+writer = DBWriter(
+    connection=hive,
+    table="test.spark_single_partition",
+    options={"if_exists": "replace_entire_table"},
+)
+writer.run(df_single_partition)
+```
+
+---
+
+### ✅ Способ 3. Партиционирование через Hive по столбцу `reg_year`
+
+Создаём таблицу `test.hive_partitioned`:
+
+```python
+writer = DBWriter(
+    connection=hive,
+    table="test.hive_partitioned",
+    options={
+        "if_exists": "replace_entire_table",
+        "partitionBy": "reg_year",
+    },
+)
 writer.run(df)
 ```
 
-Остановка сессии
+---
+
+## 🔍 Шаг 9. Проверка результатов в Hive CLI
+
+```sql
+hive
+> USE test;
+> SHOW TABLES;
+> SELECT COUNT(*) FROM spark_auto;
+> SELECT COUNT(*) FROM spark_single_partition;
+> SELECT reg_year, COUNT(*) FROM hive_partitioned GROUP BY reg_year;
+```
+
+---
+
+## ⛔ Шаг 10. Завершение сессии
+
 ```python
 spark.stop()
-quit()
 ```
+
+---
