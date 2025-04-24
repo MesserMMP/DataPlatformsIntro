@@ -130,25 +130,41 @@ reader = FileDFReader(connection=hdfs, format=CSV(delimiter=",", header=True), s
 df = reader.run(["electric_vehicles.csv"])
 df.count() # Общее число строк
 df.rdd.getNumPartitions() # Число партиций (2)
-```
-
----
-
-## 🔁 Шаг 7. Трансформация и партиционирование
-
-Посмотрите на  колонку `Model Year` для дальнейшего партиционирования:
-
-```python
-dt = df.select("Model Year")
+dt = df.select("Model Year") # Столбец для партиционирования Hive
 dt.show()
 ```
-
 *Результат работы из веб интерфейса:*
 
 ![Spark-Jobs](./screenshots/spark-jobs.png)
 
 ---
 
+## 🔁 Шаг 7. Применение нескольких трансформаций (агрегации и преобразования типов)
+
+Приведите некоторые числовые столбцы к нужным типам, а затем выполните агрегацию:
+
+```python
+from pyspark.sql.types import IntegerType, DoubleType
+
+# Преобразование типов
+df_transformed = df \
+    .withColumn("Model Year", F.col("Model Year").cast(IntegerType())) \
+    .withColumn("Electric Range", F.col("Electric Range").cast(IntegerType())) \
+    .withColumn("Base MSRP", F.col("Base MSRP").cast(DoubleType()))
+
+# Пример агрегации: средний запас хода по каждому году
+df_agg = df_transformed.groupBy("Model Year").agg(
+    F.count("*").alias("vehicle_count"),
+    F.avg("Electric Range").alias("avg_range"),
+    F.avg("Base MSRP").alias("avg_msrp")
+)
+
+df_agg.orderBy("Model Year").show()
+```
+
+Эти преобразования позволяют использовать Spark как полноценный аналитический инструмент для обобщения и анализа EV-дата.
+
+---
 
 ## 📝 Шаг 8. Запись данных в Hive тремя способами
 
