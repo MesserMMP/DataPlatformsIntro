@@ -54,12 +54,13 @@ tar -xzvf spark-3.5.3-bin-hadoop3.tgz
 
 ```bash
 export HADOOP_CONF_DIR="/home/hadoop/hadoop-3.4.0/etc/hadoop"
-export HIVE_HOME="/home/apache-hive-4.0.1-bin"
+export HIVE_HOME="/home/hadoop/apache-hive-4.0.0-alpha-2-bin"
 export HIVE_CONF_DIR=$HIVE_HOME/conf
 export HIVE_AUX_JARS_PATH=$HIVE_HOME/lib/*
 export PATH=$PATH:$HIVE_HOME/bin
 export SPARK_LOCAL_IP=192.168.1.14 # Укажите IP вашей jump-ноды
 export SPARK_DIST_CLASSPATH="/home/hadoop/spark-3.5.3-bin-hadoop3/jars/*:/home/hadoop/hadoop-3.4.0/etc/hadoop:/home/hadoop/hadoop-3.4.0/share/hadoop/common/lib/*:/home/hadoop/hadoop-3.4.0/share/hadoop/common/*:/home/hadoop/hadoop-3.4.0/share/hadoop/hdfs:/home/hadoop/hadoop-3.4.0/share/hadoop/hdfs/lib/*:/home/hadoop/hadoop-3.4.0/share/hadoop/hdfs/*:/home/hadoop/hadoop-3.4.0/share/hadoop/mapreduce/*:/home/hadoop/hadoop-3.4.0/share/hadoop/yarn:/home/hadoop/hadoop-3.4.0/share/hadoop/yarn/lib/*:/home/hadoop/hadoop-3.4.0/share/hadoop/yarn/*:/home/hadoop/apache-hive-4.0.0-alpha-2-bin/*:/home/hadoop/apache-hive-4.0.0-alpha-2-bin/lib/*"
+
 cd spark-3.5.3-bin-hadoop3/
 export SPARK_HOME=`pwd`
 export PYTHONPATH=$(ZIPS=("$SPARK_HOME"/python/lib/*.zip); IFS=:; echo "${ZIPS[*]}"):$PYTHONPATH
@@ -86,14 +87,23 @@ pip install onetl[files]
 
 ```bash
 hdfs dfs -mkdir -p /input
-wget <ССЫЛКА_НА_ДАННЫЕ> -O for_spark.csv
-hdfs dfs -put for_spark.csv /input
+wget https://raw.githubusercontent.com/MesserMMP/Datasets/main/Electric_Vehicle_Population_Data.csv -O electric_vehicles.csv
+hdfs dfs -put electric_vehicles.csv /input
 ```
 
 ---
 
 ## 🚀 Шаг 6. Запуск Spark-сессии с Hive и YARN
 
+Перед тем как запускать Spark-сессию с Hive, необходимо запустить Hive Metastore вручную в фоне (если он ещё не запущен):
+
+```bash
+hive --hiveconf hive.server2.enable.doAs=false \
+     --hiveconf hive.security.authorization.enabled=false \
+     --service metastore 1>> /tmp/metastore.log 2>> /tmp/metastore.log &
+```
+
+Запустите интерактивную оболочку Python:
 ```bash
 ipython
 ```
@@ -117,23 +127,28 @@ spark = SparkSession.builder \
 
 hdfs = SparkHDFS(host="tmpl-nn", port=9000, spark=spark, cluster="test")
 reader = FileDFReader(connection=hdfs, format=CSV(delimiter=",", header=True), source_path="/input")
-df = reader.run(["for_spark.csv"])
+df = reader.run(["electric_vehicles.csv"])
 df.count() # Общее число строк
-df.rdd.getNumPartitions() # Число партиций
+df.rdd.getNumPartitions() # Число партиций (2)
 ```
 
 ---
 
 ## 🔁 Шаг 7. Трансформация и партиционирование
 
-Добавим колонку `reg_year` для партиционирования:
+Посмотрите на  колонку `Model Year` для дальнейшего партиционирования:
 
 ```python
-df = df.withColumn("reg_year", F.col("registration date").substr(0, 4))
-df.select("reg_year").distinct().show() # Показываем уникальные значения в столбце партиционирования
+dt = df.select("Model Year")
+dt.show()
 ```
 
+*Результат работы из веб интерфейса:*
+
+![Spark-Jobs](./screenshots/spark-jobs.png)
+
 ---
+
 
 ## 📝 Шаг 8. Запись данных в Hive тремя способами
 
@@ -142,9 +157,6 @@ df.select("reg_year").distinct().show() # Показываем уникальн�
 Создаём таблицу `test.spark_auto`:
 
 ```python
-from onetl.db import DBWriter
-from onetl.connection import Hive
-
 hive = Hive(spark=spark, cluster="test")
 hive.check()  # Проверка подключения
 
@@ -155,6 +167,10 @@ writer = DBWriter(
 )
 writer.run(df)
 ```
+
+*Как видно из веб-интерфейса было создано 2 таблицы по числу партиций:*
+
+![Spark_Auto_Partition](./screenshots/spark_auto_partition.png)
 
 ---
 
@@ -173,9 +189,13 @@ writer = DBWriter(
 writer.run(df_single_partition)
 ```
 
+*Как видно из веб-интерфейса тут уже только 1 таблица:*
+
+![Spark_Single_Partition](./screenshots/spark_single_partition.png)
+
 ---
 
-### ✅ Способ 3. Партиционирование через Hive по столбцу `reg_year`
+### ✅ Способ 3. Партиционирование через Hive по столбцу `Model Year`
 
 Создаём таблицу `test.hive_partitioned`:
 
@@ -185,23 +205,36 @@ writer = DBWriter(
     table="test.hive_partitioned",
     options={
         "if_exists": "replace_entire_table",
-        "partitionBy": "reg_year",
+        "partitionBy": "Model Year",
     },
 )
 writer.run(df)
 ```
 
+*Как видно из веб-интерфейса тут уже только таблицы для каждого значения года `Model Year`:*
+
+![Hive_Partition](./screenshots/hive_partition.png)
+
+*Все созданные таблицы:*
+
+![All_tables](./screenshots/all_tables.png)
+
+
 ---
 
 ## 🔍 Шаг 9. Проверка результатов в Hive CLI
 
+
+```bash
+beeline -u jdbc:hive2://tmpl-jn:5432 -n scott -p tiger
+```
+
 ```sql
-hive
-> USE test;
-> SHOW TABLES;
-> SELECT COUNT(*) FROM spark_auto;
-> SELECT COUNT(*) FROM spark_single_partition;
-> SELECT reg_year, COUNT(*) FROM hive_partitioned GROUP BY reg_year;
+USE test;
+SHOW TABLES;
+SELECT * FROM spark_auto LIMIT 5;
+SELECT * FROM spark_single_partition LIMIT 5;
+SELECT * FROM hive_partitioned LIMIT 5;
 ```
 
 ---
